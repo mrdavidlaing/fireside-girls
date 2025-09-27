@@ -1,0 +1,27 @@
+{
+  "name": "fireside-girls",
+  "version": "1.0.0",
+  "description": "Minecraft bot troupe based on the Fireside Girls from Phineas and Ferb",
+  "main": "scripts/start-all.js",
+  "scripts": {
+    "start": "node scripts/start-all.js",
+    "start:single": "node scripts/start-single.js",
+    "stop": "node scripts/stop-all.js",
+    "dev": "nodemon scripts/start-all.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": ["minecraft", "bot", "mineflayer", "fireside-girls", "phineas-ferb"],
+  "author": "",
+  "license": "MIT",
+  "packageManager": "pnpm@10.17.1",
+  "dependencies": {
+    "mineflayer": "^4.20.1",
+    "mineflayer-pathfinder": "^2.4.2",
+    "mineflayer-auto-eat": "^3.1.0",
+    "mineflayer-collectblock": "^1.4.0",
+    "dotenv": "^16.4.5"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.4"
+  }
+}
