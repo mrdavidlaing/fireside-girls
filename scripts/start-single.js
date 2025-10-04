@@ -34,10 +34,15 @@ async function startSingleBot() {
   const manager = new BotManager()
 
   try {
+    console.log('Loading bot classes...')
+    const loadStart = Date.now()
     await manager.loadBotClasses()
-    console.log('✅ Bot classes loaded successfully')
+    console.log(`✅ Bot classes loaded successfully (${Date.now() - loadStart}ms)`)
 
+    console.log('Starting bot...')
+    const startBotTime = Date.now()
     const result = await manager.startBot(botName)
+    console.log(`Bot connection attempt took ${Date.now() - startBotTime}ms`)
 
     if (result) {
       const botConfig = config.bots[botName]
