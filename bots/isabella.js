@@ -37,6 +37,9 @@ class Isabella extends BotBase {
         case 'patrol':
           this.startPatrol()
           break
+        case 'clear':
+          this.clearArea(username, command.slice(1).join(' '))
+          break
         case 'help':
           this.showLeaderCommands(username)
           break
@@ -139,6 +142,7 @@ class Isabella extends BotBase {
       '!mission <type> - Start a mission',
       '!formation - Form up in line',
       '!patrol - Start area patrol',
+      '!clear [radius] - Clear area (default 5, max 10)',
       '!follow - Follow a player',
       '!status - Report status'
     ]
@@ -160,6 +164,179 @@ class Isabella extends BotBase {
       this.bot.chat(`${username}, Phineas always has the most amazing projects! I wonder what he's building today?`)
     } else {
       super.handleMention(username, message)
+    }
+  }
+
+  async clearArea(username, args) {
+    // Cancel any active pathfinder goal (like follow) to avoid conflicts
+    this.bot.pathfinder.setGoal(null)
+
+    // Parse args: "radius <number>" or just a number for radius around current position
+    const argParts = args.trim().split(' ')
+    let radius = 5 // default radius
+
+    if (argParts.length > 0 && argParts[0] !== '') {
+      const parsed = parseInt(argParts[0])
+      if (!isNaN(parsed) && parsed > 0 && parsed <= 10) {
+        radius = parsed
+      }
+    }
+
+    // Check for other Fireside Girls online
+    const troopMembers = ['gretchen', 'adyson', 'ginger', 'holly', 'katie', 'milly', 'candace']
+    const activeTroop = troopMembers.filter(name =>
+      this.bot.players[name] && this.bot.players[name].entity
+    )
+
+    if (activeTroop.length > 0) {
+      // Multi-bot clearing with troupe coordination
+      this.bot.chat(`Clearing area for ${username}! Calling in the troupe!`)
+      this.logger.info(`Clear area with ${activeTroop.length} troupe members: ${activeTroop.join(', ')}`)
+
+      await this.coordinatedClear(username, radius, activeTroop)
+    } else {
+      // Solo clearing
+      this.bot.chat(`Clearing area for ${username}! Working solo...`)
+      this.logger.info(`Clear area command from ${username}: solo, radius ${radius}`)
+
+      await this.soloClear(radius)
+    }
+  }
+
+  async soloClear(radius) {
+    try {
+      const botPos = this.bot.entity.position
+      const blocks = []
+
+      // Find all non-air blocks in radius
+      for (let x = -radius; x <= radius; x++) {
+        for (let y = -2; y <= 3; y++) { // Clear from 2 below to 3 above
+          for (let z = -radius; z <= radius; z++) {
+            const pos = botPos.offset(x, y, z)
+            const block = this.bot.blockAt(pos)
+            if (block && block.name !== 'air' && this.bot.canDigBlock(block)) {
+              blocks.push(block)
+            }
+          }
+        }
+      }
+
+      this.bot.chat(`Found ${blocks.length} blocks to clear in ${radius} block radius!`)
+      this.logger.info(`Clearing ${blocks.length} blocks`)
+
+      // Collect blocks one by one
+      for (const block of blocks) {
+        try {
+          await this.bot.collectBlock.collect(block)
+        } catch (err) {
+          this.logger.warn(`Failed to collect block at ${block.position}: ${err.message}`)
+        }
+      }
+
+      this.bot.chat('Area cleared! All done!')
+    } catch (error) {
+      this.bot.chat(`Oops, ran into a problem: ${error.message}`)
+      this.logger.error(`Clear area error: ${error.message}`)
+    }
+  }
+
+  async coordinatedClear(username, radius, activeTroop) {
+    try {
+      const centerPos = this.bot.entity.position
+      const totalBots = activeTroop.length + 1 // +1 for Isabella
+
+      this.bot.chat(`${totalBots} Fireside Girls reporting! Dividing the work...`)
+
+      // Divide area into quadrants/zones based on number of bots
+      const zones = this.divideIntoZones(centerPos, radius, totalBots)
+
+      // Isabella takes zone 0, assigns others via chat commands
+      this.bot.chat(`Girls, let's clear this area efficiently!`)
+
+      // Send zone assignments via chat
+      activeTroop.forEach((botName, index) => {
+        const zone = zones[index + 1]
+        const zoneCenter = zone.center
+        // Send a message that other bots can parse
+        setTimeout(() => {
+          this.bot.chat(`${botName}, clear zone at ${Math.round(zoneCenter.x)} ${Math.round(zoneCenter.y)} ${Math.round(zoneCenter.z)} radius ${zone.radius}`)
+        }, (index + 1) * 500)
+      })
+
+      // Isabella clears her zone
+      setTimeout(async () => {
+        const myZone = zones[0]
+        this.bot.chat(`I'll take the center zone!`)
+        await this.clearZone(myZone)
+        this.bot.chat(`My zone is clear!`)
+      }, (activeTroop.length + 1) * 500)
+
+    } catch (error) {
+      this.bot.chat(`Coordination error: ${error.message}`)
+      this.logger.error(`Coordinated clear error: ${error.message}`)
+    }
+  }
+
+  divideIntoZones(center, totalRadius, numBots) {
+    const zones = []
+
+    if (numBots === 1) {
+      zones.push({ center, radius: totalRadius })
+    } else if (numBots === 2) {
+      // Split east/west
+      zones.push({ center: center.offset(-totalRadius/2, 0, 0), radius: totalRadius/2 })
+      zones.push({ center: center.offset(totalRadius/2, 0, 0), radius: totalRadius/2 })
+    } else if (numBots <= 4) {
+      // Split into quadrants
+      const offset = totalRadius / 2
+      zones.push({ center: center.offset(-offset, 0, -offset), radius: totalRadius/2 })
+      zones.push({ center: center.offset(offset, 0, -offset), radius: totalRadius/2 })
+      zones.push({ center: center.offset(-offset, 0, offset), radius: totalRadius/2 })
+      zones.push({ center: center.offset(offset, 0, offset), radius: totalRadius/2 })
+    } else {
+      // For more bots, create a grid pattern
+      const gridSize = Math.ceil(Math.sqrt(numBots))
+      const zoneRadius = totalRadius / gridSize
+
+      for (let i = 0; i < numBots; i++) {
+        const row = Math.floor(i / gridSize)
+        const col = i % gridSize
+        const offsetX = (col - gridSize/2 + 0.5) * zoneRadius * 2
+        const offsetZ = (row - gridSize/2 + 0.5) * zoneRadius * 2
+        zones.push({ center: center.offset(offsetX, 0, offsetZ), radius: zoneRadius })
+      }
+    }
+
+    return zones
+  }
+
+  async clearZone(zone) {
+    const blocks = []
+    const centerPos = zone.center
+    const radius = zone.radius
+
+    // Find all non-air blocks in zone
+    for (let x = -radius; x <= radius; x++) {
+      for (let y = -2; y <= 3; y++) {
+        for (let z = -radius; z <= radius; z++) {
+          const pos = centerPos.offset(x, y, z)
+          const block = this.bot.blockAt(pos)
+          if (block && block.name !== 'air' && this.bot.canDigBlock(block)) {
+            blocks.push(block)
+          }
+        }
+      }
+    }
+
+    this.logger.info(`Clearing ${blocks.length} blocks in zone`)
+
+    // Collect blocks one by one
+    for (const block of blocks) {
+      try {
+        await this.bot.collectBlock.collect(block)
+      } catch (err) {
+        this.logger.warn(`Failed to collect block at ${block.position}: ${err.message}`)
+      }
     }
   }
 
