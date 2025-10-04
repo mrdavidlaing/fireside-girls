@@ -10,16 +10,23 @@
     "dev": "nodemon scripts/start-all.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
-  "keywords": ["minecraft", "bot", "mineflayer", "fireside-girls", "phineas-ferb"],
+  "keywords": [
+    "minecraft",
+    "bot",
+    "mineflayer",
+    "fireside-girls",
+    "phineas-ferb"
+  ],
   "author": "",
   "license": "MIT",
   "packageManager": "pnpm@10.17.1",
   "dependencies": {
+    "dotenv": "^16.4.5",
     "mineflayer": "^4.20.1",
-    "mineflayer-pathfinder": "^2.4.2",
     "mineflayer-auto-eat": "^3.1.0",
     "mineflayer-collectblock": "^1.4.0",
-    "dotenv": "^16.4.5"
+    "mineflayer-pathfinder": "^2.4.2",
+    "mineflayer-tool": "^1.2.0"
   },
   "devDependencies": {
     "nodemon": "^3.1.4"
