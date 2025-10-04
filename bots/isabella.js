@@ -184,9 +184,16 @@ class Isabella extends BotBase {
 
     // Check for other Fireside Girls online
     const troopMembers = ['gretchen', 'adyson', 'ginger', 'holly', 'katie', 'milly', 'candace']
-    const activeTroop = troopMembers.filter(name =>
-      this.bot.players[name] && this.bot.players[name].entity
-    )
+    const activeTroop = troopMembers.filter(name => {
+      // Check both lowercase and capitalized versions
+      const lowerName = this.bot.players[name]
+      const capitalName = this.bot.players[name.charAt(0).toUpperCase() + name.slice(1)]
+      return (lowerName && lowerName.entity) || (capitalName && capitalName.entity)
+    }).map(name => {
+      // Return the actual player name (capitalized if that's what exists)
+      if (this.bot.players[name]) return name
+      return name.charAt(0).toUpperCase() + name.slice(1)
+    })
 
     if (activeTroop.length > 0) {
       // Multi-bot clearing with troupe coordination
@@ -206,34 +213,30 @@ class Isabella extends BotBase {
   async soloClear(radius) {
     try {
       const botPos = this.bot.entity.position
-      const blocks = []
+      let totalCleared = 0
 
-      // Find all non-air blocks in radius
+      this.bot.chat(`Clearing ${radius} block radius area...`)
+
+      // Clear blocks immediately instead of storing in array
       for (let x = -radius; x <= radius; x++) {
         for (let y = -2; y <= 3; y++) { // Clear from 2 below to 3 above
           for (let z = -radius; z <= radius; z++) {
             const pos = botPos.offset(x, y, z)
             const block = this.bot.blockAt(pos)
             if (block && block.name !== 'air' && this.bot.canDigBlock(block)) {
-              blocks.push(block)
+              try {
+                await this.bot.collectBlock.collect(block)
+                totalCleared++
+              } catch (err) {
+                this.logger.warn(`Failed to collect block at ${block.position}: ${err.message}`)
+              }
             }
           }
         }
       }
 
-      this.bot.chat(`Found ${blocks.length} blocks to clear in ${radius} block radius!`)
-      this.logger.info(`Clearing ${blocks.length} blocks`)
-
-      // Collect blocks one by one
-      for (const block of blocks) {
-        try {
-          await this.bot.collectBlock.collect(block)
-        } catch (err) {
-          this.logger.warn(`Failed to collect block at ${block.position}: ${err.message}`)
-        }
-      }
-
-      this.bot.chat('Area cleared! All done!')
+      this.bot.chat(`Area cleared! Removed ${totalCleared} blocks!`)
+      this.logger.info(`Cleared ${totalCleared} blocks`)
     } catch (error) {
       this.bot.chat(`Oops, ran into a problem: ${error.message}`)
       this.logger.error(`Clear area error: ${error.message}`)
@@ -250,17 +253,16 @@ class Isabella extends BotBase {
       // Divide area into quadrants/zones based on number of bots
       const zones = this.divideIntoZones(centerPos, radius, totalBots)
 
-      // Isabella takes zone 0, assigns others via chat commands
-      this.bot.chat(`Girls, let's clear this area efficiently!`)
-
-      // Send zone assignments via chat
+      // Send zone assignments via chat with longer delays to avoid spam kick
+      let delay = 1500
       activeTroop.forEach((botName, index) => {
         const zone = zones[index + 1]
         const zoneCenter = zone.center
         // Send a message that other bots can parse
         setTimeout(() => {
           this.bot.chat(`${botName}, clear zone at ${Math.round(zoneCenter.x)} ${Math.round(zoneCenter.y)} ${Math.round(zoneCenter.z)} radius ${zone.radius}`)
-        }, (index + 1) * 500)
+        }, delay)
+        delay += 1500
       })
 
       // Isabella clears her zone
@@ -269,7 +271,7 @@ class Isabella extends BotBase {
         this.bot.chat(`I'll take the center zone!`)
         await this.clearZone(myZone)
         this.bot.chat(`My zone is clear!`)
-      }, (activeTroop.length + 1) * 500)
+      }, delay)
 
     } catch (error) {
       this.bot.chat(`Coordination error: ${error.message}`)
@@ -311,33 +313,29 @@ class Isabella extends BotBase {
   }
 
   async clearZone(zone) {
-    const blocks = []
     const centerPos = zone.center
     const radius = zone.radius
+    let totalCleared = 0
 
-    // Find all non-air blocks in zone
+    // Clear blocks immediately instead of storing in array
     for (let x = -radius; x <= radius; x++) {
       for (let y = -2; y <= 3; y++) {
         for (let z = -radius; z <= radius; z++) {
           const pos = centerPos.offset(x, y, z)
           const block = this.bot.blockAt(pos)
           if (block && block.name !== 'air' && this.bot.canDigBlock(block)) {
-            blocks.push(block)
+            try {
+              await this.bot.collectBlock.collect(block)
+              totalCleared++
+            } catch (err) {
+              this.logger.warn(`Failed to collect block at ${block.position}: ${err.message}`)
+            }
           }
         }
       }
     }
 
-    this.logger.info(`Clearing ${blocks.length} blocks in zone`)
-
-    // Collect blocks one by one
-    for (const block of blocks) {
-      try {
-        await this.bot.collectBlock.collect(block)
-      } catch (err) {
-        this.logger.warn(`Failed to collect block at ${block.position}: ${err.message}`)
-      }
-    }
+    this.logger.info(`Cleared ${totalCleared} blocks in zone`)
   }
 
   onChat(username, message) {
